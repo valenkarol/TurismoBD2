@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titulo %}Ingresar{% endblock %}
+{% block contenido %}
+<div class="login">
+  <h1>Turismo<b>UQ</b></h1>
+  <p class="suave">Sistema de reservas de alojamientos del Quindío</p>
+  <form method="post" class="tarjeta">
+    <label>Usuario <input name="usuario" required autofocus></label>
+    <label>Clave <input name="clave" type="password" required></label>
+    <button>Ingresar</button>
+  </form>
+  <p class="suave pequeno">Pruebas: recepcion1 · admin_aloj1 · gerente1 · auditor1 — clave <code>Turismo2026*</code></p>
+</div>
+{% endblock %}

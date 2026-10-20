@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}TurismoUQ{% endblock %} · TurismoUQ</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilos.css') }}">
+</head>
+<body>
+{% if usuario %}
+<header class="barra">
+  <a class="marca" href="{{ url_for('inicio') }}">Turismo<b>UQ</b></a>
+  <nav>
+    <a href="{{ url_for('inicio') }}">Inicio</a>
+    {% if usuario.rol in ROLES_OPERACION %}<a href="{{ url_for('buscar') }}">Buscar y reservar</a>{% endif %}
+    <a href="{{ url_for('reservas') }}">Reservas</a>
+    <a href="{{ url_for('clientes') }}">Clientes</a>
+    {% if usuario.rol in ROLES_LIQUIDACION %}<a href="{{ url_for('liquidacion') }}">Liquidación</a>{% endif %}
+    {% if usuario.rol in ROLES_AUDITORIA %}<a href="{{ url_for('auditoria') }}">Auditoría</a>{% endif %}
+  </nav>
+  <div class="quien">{{ usuario.nombre }} <span class="rol">{{ usuario.rol }}</span>
+    <a href="{{ url_for('salir') }}">Salir</a></div>
+</header>
+{% endif %}
+
+<main class="contenido">
+  {% with mensajes = get_flashed_messages(with_categories=true) %}
+    {% for tipo, texto in mensajes %}
+      <div class="aviso {{ tipo }}">{{ texto }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block contenido %}{% endblock %}
+</main>
+</body>
+</html>
