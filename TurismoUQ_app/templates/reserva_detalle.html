@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block titulo %}Reserva {{ r.id_reserva }}{% endblock %}
+{% block contenido %}
+<h1>Reserva #{{ r.id_reserva }} <span class="estado {{ r.estado|lower }}">{{ r.estado }}</span></h1>
+
+<div class="cifras">
+  <div class="cifra"><span>{{ r.total|dinero }}</span>Total</div>
+  <div class="cifra"><span>{{ r.pagado|dinero }}</span>Pagado</div>
+  <div class="cifra"><span>{{ r.saldo|dinero }}</span>Saldo</div>
+</div>
+
+<div class="dos-columnas">
+  <section class="tarjeta">
+    <h2>Datos</h2>
+    <p><b>{{ r.cliente }}</b> · {{ r.tipo_documento }} {{ r.numero_documento }}<br>
+       {{ r.telefono or '' }} {{ r.correo or '' }}</p>
+    <p>Llegada {{ r.fecha_checkin|fecha }} · Salida {{ r.fecha_checkout|fecha }}<br>
+       <span class="suave">Reservada el {{ r.fecha_reserva|fecha }}</span></p>
+    <h3>Habitaciones</h3>
+    <table>
+      <tr><th>Alojamiento</th><th>Hab.</th><th>Huésp.</th><th class="num">Valor</th></tr>
+      {% for h in habitaciones %}
+      <tr><td>{{ h.alojamiento }} ({{ h.municipio }})</td><td>{{ h.numero }} · {{ h.tipo }}</td>
+          <td>{{ h.cantidad_huespedes }}</td><td class="num">{{ h.valor_estadia|dinero }}</td></tr>
+      {% endfor %}
+    </table>
+    <h3>Servicios</h3>
+    <table>
+      {% for s in servicios %}
+      <tr><td>{{ s.nombre }}</td><td>{{ s.cantidad }} × {{ s.precio_unitario|dinero }}</td>
+          <td class="num">{{ s.subtotal|dinero }}</td></tr>
+      {% else %}<tr><td class="suave">Sin servicios.</td></tr>{% endfor %}
+    </table>
+    <h3>Pagos</h3>
+    <table>
+      {% for p in pagos %}
+      <tr><td>{{ p.fecha_pago|fecha }}</td><td>{{ p.metodo_pago }}</td><td>{{ p.estado }}</td>
+          <td class="num">{{ p.valor|dinero }}</td></tr>
+      {% else %}<tr><td class="suave">Sin pagos.</td></tr>{% endfor %}
+    </table>
+  </section>
+
+  {% if usuario.rol in ROLES_OPERACION and r.estado in ('PENDIENTE', 'CONFIRMADA') %}
+  <div>
+    <form method="post" action="{{ url_for('registrar_pago', id_reserva=r.id_reserva) }}" class="tarjeta">
+      <h2>Registrar pago</h2>
+      <p class="suave pequeno">Con el 30 % pagado la reserva pasa a CONFIRMADA.</p>
+      <div class="fila">
+        <label>Valor <input type="number" name="valor" min="1" step="1" value="{{ r.saldo|int if r.saldo > 0 }}" required></label>
+        <label>Método <select name="metodo">{% for m in metodos %}<option>{{ m }}</option>{% endfor %}</select></label>
+      </div>
+      <button>Registrar pago</button>
+    </form>
+
+    <form method="post" action="{{ url_for('agregar_servicio', id_reserva=r.id_reserva) }}" class="tarjeta">
+      <h2>Agregar servicio</h2>
+      <div class="fila">
+        <label>Servicio <select name="id_servicio">{% for s in catalogo %}<option value="{{ s.id_servicio }}">{{ s.nombre }} ({{ s.precio|dinero }})</option>{% endfor %}</select></label>
+        <label>Cantidad <input type="number" name="cantidad" min="1" value="1" required></label>
+      </div>
+      <button>Agregar</button>
+    </form>
+
+    <form method="post" action="{{ url_for('cancelar_reserva', id_reserva=r.id_reserva) }}" class="tarjeta"
+          onsubmit="return confirm('¿Cancelar la reserva {{ r.id_reserva }}?');">
+      <h2>Cancelar reserva</h2>
+      <button class="peligro">Cancelar reserva</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+<p><a href="{{ url_for('reservas') }}" class="enlace">← Volver a reservas</a></p>
+{% endblock %}

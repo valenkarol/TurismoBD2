@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titulo %}Auditoría{% endblock %}
+{% block contenido %}
+<h1>Auditoría de tarifas</h1>
+<p class="suave">Últimos 100 cambios registrados por los disparadores de TARIFA.</p>
+<table class="tarjeta">
+  <tr><th>Fecha</th><th>Operación</th><th>Usuario BD</th><th>Equipo</th><th>Tarifa</th>
+      <th>Hab.</th><th>Temp.</th><th class="num">Antes</th><th class="num">Después</th></tr>
+  {% for f in filas %}
+  <tr><td>{{ f.fecha_cambio|fecha_hora }}</td><td>{{ f.operacion }}</td><td>{{ f.usuario_bd }}</td>
+      <td>{{ f.equipo or '—' }}</td><td>{{ f.id_tarifa }}</td><td>{{ f.id_habitacion }}</td><td>{{ f.id_temporada }}</td>
+      <td class="num">{{ f.valor_anterior|dinero }}</td><td class="num">{{ f.valor_nuevo|dinero }}</td></tr>
+  {% else %}<tr><td colspan="9" class="suave">Aún no hay cambios auditados.</td></tr>{% endfor %}
+</table>
+{% endblock %}

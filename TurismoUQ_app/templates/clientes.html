@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block titulo %}Clientes{% endblock %}
+{% block contenido %}
+<h1>Clientes</h1>
+<form method="get" class="tarjeta filtros">
+  <label>Documento o nombre <input name="q" value="{{ q }}" placeholder="Ej. 1094 o Gómez"></label>
+  <button>Buscar</button>
+</form>
+<table class="tarjeta">
+  <tr><th>Documento</th><th>Nombre</th><th>Teléfono</th><th>Correo</th><th class="num">Reservas</th></tr>
+  {% for c in clientes %}
+  <tr>
+    <td>{{ c.tipo_documento }} {{ c.numero_documento }}</td>
+    <td>{{ c.nombres }} {{ c.apellidos }}</td>
+    <td>{{ c.telefono or '—' }}</td><td>{{ c.correo or '—' }}</td>
+    <td class="num"><a href="{{ url_for('reservas', documento=c.numero_documento) }}">{{ c.reservas }}</a></td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="suave">Sin resultados.</td></tr>{% endfor %}
+</table>
+{% endblock %}

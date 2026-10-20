@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block titulo %}Liquidación{% endblock %}
+{% block contenido %}
+<h1>Liquidación mensual</h1>
+<form method="get" class="tarjeta filtros">
+  <label>Año <input type="number" name="anio" value="{{ anio }}" min="2024" max="2027"></label>
+  <label>Mes <input type="number" name="mes" value="{{ mes }}" min="1" max="12"></label>
+  <button>Ver</button>
+</form>
+
+{% if usuario.rol == 'GERENTE' %}
+<form method="post" class="tarjeta filtros">
+  <input type="hidden" name="anio" value="{{ anio }}"><input type="hidden" name="mes" value="{{ mes }}">
+  <label>Comisión (%) <input type="number" name="comision" value="{{ comision }}" min="0" max="100" step="0.5"></label>
+  <button>Generar / recalcular {{ "%02d"|format(mes) }}/{{ anio }}</button>
+</form>
+{% endif %}
+
+{% if filas %}
+<div class="cifras">
+  <div class="cifra"><span>{{ totales.total_bruto|dinero }}</span>Total bruto</div>
+  <div class="cifra"><span>{{ totales.valor_comision|dinero }}</span>Comisión</div>
+  <div class="cifra"><span>{{ totales.valor_neto|dinero }}</span>Neto a alojamientos</div>
+</div>
+<table class="tarjeta">
+  <tr><th>Alojamiento</th><th class="num">Reservas</th><th class="num">Noches</th><th class="num">Hospedaje</th>
+      <th class="num">Servicios</th><th class="num">Bruto</th><th class="num">Comisión</th><th class="num">Neto</th></tr>
+  {% for f in filas %}
+  <tr><td>{{ f.alojamiento }}</td><td class="num">{{ f.num_reservas }}</td><td class="num">{{ f.noches_vendidas }}</td>
+      <td class="num">{{ f.ingreso_hospedaje|dinero }}</td><td class="num">{{ f.ingreso_servicios|dinero }}</td>
+      <td class="num">{{ f.total_bruto|dinero }}</td><td class="num">{{ f.valor_comision|dinero }}</td>
+      <td class="num"><b>{{ f.valor_neto|dinero }}</b></td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="suave">No hay liquidación generada para {{ "%02d"|format(mes) }}/{{ anio }}.</p>
+{% endif %}
+{% endblock %}

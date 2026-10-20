@@ -1,0 +1,104 @@
+/* estilos.css · TurismoUQ */
+:root {
+  --verde: #1f6f4a;
+  --verde-claro: #e7f3ec;
+  --cafe: #7a4b2a;
+  --fondo: #f6f5f1;
+  --texto: #22261f;
+  --suave: #6b7065;
+  --borde: #dfddd4;
+  --rojo: #b3261e;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--fondo);
+  color: var(--texto);
+  font-size: 15px;
+}
+a { color: var(--verde); }
+h1 { font-size: 1.6rem; margin: 0 0 1rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+h2 { font-size: 1.1rem; margin: 0 0 .8rem; }
+h3 { font-size: .95rem; margin: 1.2rem 0 .4rem; color: var(--suave); }
+
+/* Barra superior */
+.barra {
+  display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+  background: var(--verde); color: #fff; padding: .7rem 1.5rem;
+}
+.barra a { color: #fff; text-decoration: none; }
+.marca { font-size: 1.3rem; }
+.barra nav { display: flex; gap: 1rem; flex-wrap: wrap; flex: 1; }
+.barra nav a { opacity: .85; }
+.barra nav a:hover { opacity: 1; text-decoration: underline; }
+.quien { font-size: .9rem; display: flex; gap: .6rem; align-items: center; }
+.rol { background: rgba(255,255,255,.2); padding: .1rem .5rem; border-radius: 99px; font-size: .75rem; }
+
+.contenido { max-width: 1150px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+
+/* Tarjetas y formularios */
+.tarjeta {
+  background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  padding: 1.2rem; margin-bottom: 1rem;
+}
+label { display: flex; flex-direction: column; gap: .3rem; font-size: .85rem; color: var(--suave); margin-bottom: .8rem; flex: 1; }
+input, select {
+  font: inherit; color: var(--texto); padding: .5rem .6rem;
+  border: 1px solid var(--borde); border-radius: 6px; background: #fff; min-width: 0;
+}
+input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: -1px; }
+button, .boton {
+  font: inherit; background: var(--verde); color: #fff; border: 0; border-radius: 6px;
+  padding: .55rem 1rem; cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap;
+}
+button:hover, .boton:hover { filter: brightness(1.1); }
+button.peligro { background: var(--rojo); }
+.filtros { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+.filtros label { margin: 0; flex: 1 1 150px; }
+.fila { display: flex; gap: 1rem; flex-wrap: wrap; }
+.fila label { flex: 1 1 180px; }
+.enlace { margin-left: 1rem; }
+
+/* Tablas */
+table { width: 100%; border-collapse: collapse; }
+table.tarjeta { display: block; overflow-x: auto; padding: 0; }
+table.tarjeta tbody { display: table; width: 100%; }
+th, td { text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--borde); }
+th { font-size: .8rem; color: var(--suave); font-weight: 600; background: #fbfaf7; }
+tr:last-child td { border-bottom: 0; }
+.num { text-align: right; white-space: nowrap; }
+tr.total td { font-weight: 700; border-top: 2px solid var(--borde); }
+
+/* Cifras de resumen */
+.cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.cifra { background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 1rem; color: var(--suave); font-size: .85rem; }
+.cifra span { display: block; font-size: 1.5rem; color: var(--texto); font-weight: 600; }
+
+.dos-columnas { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; align-items: start; }
+
+/* Estados de reserva */
+.estado { font-size: .75rem; padding: .15rem .55rem; border-radius: 99px; font-weight: 600; background: #eee; }
+.estado.pendiente  { background: #fff3cd; color: #7a5b00; }
+.estado.confirmada { background: var(--verde-claro); color: var(--verde); }
+.estado.cancelada  { background: #fde8e7; color: var(--rojo); }
+.estado.finalizada { background: #e8eaf6; color: #3949ab; }
+
+/* Avisos */
+.aviso { padding: .8rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+.aviso.ok { background: var(--verde-claro); color: var(--verde); }
+.aviso.error { background: #fde8e7; color: var(--rojo); }
+
+.suave { color: var(--suave); }
+.pequeno { font-size: .85rem; }
+
+/* Login */
+.login { max-width: 380px; margin: 8vh auto; text-align: center; }
+.login h1 { justify-content: center; font-size: 2.2rem; color: var(--verde); margin-bottom: .2rem; }
+.login form { text-align: left; margin-top: 1.5rem; }
+.login button { width: 100%; }
+
+@media (max-width: 600px) {
+  .barra { padding: .7rem 1rem; gap: .8rem; }
+  .dos-columnas { grid-template-columns: 1fr; }
+}
