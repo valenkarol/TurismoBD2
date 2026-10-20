@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block titulo %}Inicio{% endblock %}
+{% block contenido %}
+<h1>Hola, {{ usuario.nombre }}</h1>
+<div class="cifras">
+  <div class="cifra"><span>{{ "{:,}".format(totales.reservas).replace(",", ".") }}</span>Reservas</div>
+  <div class="cifra"><span>{{ "{:,}".format(totales.clientes).replace(",", ".") }}</span>Clientes</div>
+  <div class="cifra"><span>{{ totales.alojamientos }}</span>Alojamientos</div>
+  <div class="cifra"><span>{{ totales.habitaciones }}</span>Habitaciones</div>
+</div>
+
+<div class="dos-columnas">
+  <section class="tarjeta">
+    <h2>Reservas por estado</h2>
+    <table>
+      {% for e in por_estado %}
+      <tr><td><span class="estado {{ e.estado|lower }}">{{ e.estado }}</span></td>
+          <td class="num">{{ "{:,}".format(e.cantidad).replace(",", ".") }}</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+  <section class="tarjeta">
+    <h2>Llegadas de los próximos 7 días</h2>
+    {% if llegadas %}
+    <table>
+      <tr><th>#</th><th>Cliente</th><th>Llega</th><th>Estado</th></tr>
+      {% for r in llegadas %}
+      <tr><td><a href="{{ url_for('reserva_detalle', id_reserva=r.id_reserva) }}">{{ r.id_reserva }}</a></td>
+          <td>{{ r.cliente }}</td><td>{{ r.fecha_checkin|fecha }}</td>
+          <td><span class="estado {{ r.estado|lower }}">{{ r.estado }}</span></td></tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="suave">No hay llegadas programadas.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
