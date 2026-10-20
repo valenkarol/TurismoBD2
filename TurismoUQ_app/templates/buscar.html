@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Buscar{% endblock %}
+{% block contenido %}
+<h1>Buscar habitaciones disponibles</h1>
+<form method="get" class="tarjeta filtros">
+  <input type="hidden" name="buscar" value="1">
+  <label>Llegada <input type="date" name="fecha_in" value="{{ filtros.fecha_in }}" required></label>
+  <label>Salida <input type="date" name="fecha_out" value="{{ filtros.fecha_out }}" required></label>
+  <label>Huéspedes <input type="number" name="huespedes" min="1" value="{{ filtros.huespedes }}" required></label>
+  <label>Municipio
+    <select name="id_municipio"><option value="">Todos</option>
+      {% for m in municipios %}<option value="{{ m.id_municipio }}" {% if filtros.id_municipio == m.id_municipio|string %}selected{% endif %}>{{ m.nombre }}</option>{% endfor %}
+    </select></label>
+  <label>Tipo de alojamiento
+    <select name="id_tipo"><option value="">Todos</option>
+      {% for t in tipos %}<option value="{{ t.id_tipo_alojamiento }}" {% if filtros.id_tipo == t.id_tipo_alojamiento|string %}selected{% endif %}>{{ t.nombre }}</option>{% endfor %}
+    </select></label>
+  <button>Buscar</button>
+</form>
+
+{% if resultados is not none %}
+  <p class="suave">{{ resultados|length }} habitaciones disponibles{% if resultados|length == 100 %} (se muestran las 100 más económicas){% endif %}.</p>
+  {% if resultados %}
+  <table class="tarjeta">
+    <tr><th>Alojamiento</th><th>Municipio</th><th>Tipo</th><th>Hab.</th><th>Capacidad</th><th>Noches</th><th class="num">Valor estadía</th><th></th></tr>
+    {% for h in resultados %}
+    <tr>
+      <td>{{ h.alojamiento }}</td><td>{{ h.municipio }}</td><td>{{ h.tipo_alojamiento }}</td>
+      <td>{{ h.numero }} · {{ h.tipo_habitacion }}</td><td>{{ h.capacidad }}</td><td>{{ h.noches }}</td>
+      <td class="num">{{ h.valor_estadia|dinero }}</td>
+      <td><a class="boton" href="{{ url_for('reservar', id_habitacion=h.id_habitacion, fecha_in=filtros.fecha_in, fecha_out=filtros.fecha_out, huespedes=filtros.huespedes) }}">Reservar</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+{% endif %}
+{% endblock %}

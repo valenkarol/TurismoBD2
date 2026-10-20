@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Reservas{% endblock %}
+{% block contenido %}
+<h1>Reservas</h1>
+<form method="get" class="tarjeta filtros">
+  <label>N.º reserva <input name="id_reserva" value="{{ filtros.id_reserva }}"></label>
+  <label>Documento cliente <input name="documento" value="{{ filtros.documento }}"></label>
+  <label>Estado
+    <select name="estado"><option value="">Todos</option>
+      {% for e in estados %}<option {% if filtros.estado == e %}selected{% endif %}>{{ e }}</option>{% endfor %}
+    </select></label>
+  <button>Filtrar</button>
+</form>
+<p class="suave">Se muestran las 50 más recientes que cumplen el filtro.</p>
+<table class="tarjeta">
+  <tr><th>#</th><th>Cliente</th><th>Documento</th><th>Llegada</th><th>Salida</th><th>Estado</th></tr>
+  {% for r in reservas %}
+  <tr>
+    <td><a href="{{ url_for('reserva_detalle', id_reserva=r.id_reserva) }}">{{ r.id_reserva }}</a></td>
+    <td>{{ r.cliente }}</td><td>{{ r.tipo_documento }} {{ r.numero_documento }}</td>
+    <td>{{ r.fecha_checkin|fecha }}</td><td>{{ r.fecha_checkout|fecha }}</td>
+    <td><span class="estado {{ r.estado|lower }}">{{ r.estado }}</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="suave">Sin resultados.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

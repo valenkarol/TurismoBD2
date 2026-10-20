@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Nueva reserva{% endblock %}
+{% block contenido %}
+<h1>Nueva reserva</h1>
+<div class="dos-columnas">
+  <section class="tarjeta">
+    <h2>Estadía</h2>
+    {% if habitacion %}
+    <p><b>{{ habitacion.alojamiento }}</b> · {{ habitacion.municipio }}<br>
+       Habitación {{ habitacion.numero }} ({{ habitacion.tipo }}, capacidad {{ habitacion.capacidad }})</p>
+    {% endif %}
+    <p>{{ fecha_in|fecha }} → {{ fecha_out|fecha }} · {{ huespedes }} huésped(es)</p>
+    <table>
+      <tr><th>Temporada</th><th>Noches</th><th class="num">Valor noche</th><th class="num">Subtotal</th></tr>
+      {% for d in desglose %}
+      <tr><td>{{ d.temporada }}</td><td>{{ d.noches }}</td>
+          <td class="num">{{ d.valor_noche|dinero }}</td><td class="num">{{ d.subtotal|dinero }}</td></tr>
+      {% endfor %}
+      <tr class="total"><td colspan="3">Total hospedaje</td><td class="num">{{ total|dinero }}</td></tr>
+    </table>
+  </section>
+
+  <form method="post" class="tarjeta">
+    <h2>Cliente</h2>
+    <p class="suave pequeno">Si el documento ya existe se usa ese cliente; si no, se registra con estos datos.</p>
+    <input type="hidden" name="id_habitacion" value="{{ habitacion.id_habitacion if habitacion }}">
+    <input type="hidden" name="fecha_in" value="{{ fecha_in.isoformat() }}">
+    <input type="hidden" name="fecha_out" value="{{ fecha_out.isoformat() }}">
+    <input type="hidden" name="huespedes" value="{{ huespedes }}">
+    <div class="fila">
+      <label>Tipo doc.
+        <select name="tipo_documento">{% for t in tipos_documento %}<option {% if form.tipo_documento == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+      <label>Número <input name="numero_documento" value="{{ form.numero_documento }}" required></label>
+    </div>
+    <div class="fila">
+      <label>Nombres <input name="nombres" value="{{ form.nombres }}"></label>
+      <label>Apellidos <input name="apellidos" value="{{ form.apellidos }}"></label>
+    </div>
+    <div class="fila">
+      <label>Teléfono <input name="telefono" value="{{ form.telefono }}"></label>
+      <label>Correo <input type="email" name="correo" value="{{ form.correo }}"></label>
+    </div>
+    <button>Confirmar reserva</button>
+    <a href="{{ url_for('buscar') }}" class="enlace">Volver a la búsqueda</a>
+  </form>
+</div>
+{% endblock %}
