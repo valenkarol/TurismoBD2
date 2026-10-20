@@ -88,6 +88,13 @@ def login_requerido(*roles):
     return decorador
 
 
+@app.errorhandler(oracledb.DatabaseError)
+def error_de_oracle(e):
+    """Cualquier error de Oracle no manejado se muestra como mensaje, no como pantalla rota."""
+    flash(db.mensaje_error(e), "error")
+    return render_template("base.html"), 500
+
+
 # ---------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------
@@ -190,17 +197,14 @@ def buscar():
 
     if "buscar" in request.args:
         try:
-            with db.conexion() as con:
-                with con.cursor() as cur:
-                    ref = cur.var(oracledb.DB_TYPE_CURSOR)
-                    cur.callproc(
-                        f"{PKG}.sp_buscar_disponibles",
-                        [a_fecha(filtros["fecha_in"]), a_fecha(filtros["fecha_out"]),
-                         a_entero(filtros["huespedes"]), ref],
-                        {"p_id_municipio": a_entero(filtros["id_municipio"]),
-                         "p_id_tipo_alojamiento": a_entero(filtros["id_tipo"])},
-                    )
-                    resultados = db.leer_cursor(ref.getvalue())[:100]
+            resultados = db.llamar_con_cursor(
+                f"{PKG}.sp_buscar_disponibles",
+                p_fecha_in=a_fecha(filtros["fecha_in"]),
+                p_fecha_out=a_fecha(filtros["fecha_out"]),
+                p_huespedes=a_entero(filtros["huespedes"]),
+                p_id_municipio=a_entero(filtros["id_municipio"]),
+                p_id_tipo_alojamiento=a_entero(filtros["id_tipo"]),
+            )[:100]
         except (oracledb.DatabaseError, ValueError) as e:
             msg = db.mensaje_error(e) if isinstance(e, oracledb.DatabaseError) else "Fechas no válidas."
             flash(msg, "error")
@@ -264,12 +268,10 @@ def reservar():
     # Desglose por temporada  ->  sp_detalle_estadia
     desglose, total = [], 0
     try:
-        with db.conexion() as con:
-            with con.cursor() as cur:
-                ref = cur.var(oracledb.DB_TYPE_CURSOR)
-                cur.callproc(f"{PKG}.sp_detalle_estadia",
-                             [id_habitacion, fecha_in, fecha_out, ref])
-                desglose = db.leer_cursor(ref.getvalue())
+        desglose = db.llamar_con_cursor(
+            f"{PKG}.sp_detalle_estadia",
+            p_id_habitacion=id_habitacion, p_fecha_in=fecha_in, p_fecha_out=fecha_out,
+        )
         total = sum(float(d["subtotal"] or 0) for d in desglose)
     except oracledb.DatabaseError as e:
         flash(db.mensaje_error(e), "error")

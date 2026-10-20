@@ -31,5 +31,14 @@
   {% endwith %}
   {% block contenido %}{% endblock %}
 </main>
+<script>
+  // Evita enviar el mismo formulario varias veces mientras Oracle responde
+  document.querySelectorAll("form").forEach(function (f) {
+    f.addEventListener("submit", function () {
+      var b = f.querySelector("button");
+      if (b) { setTimeout(function () { b.disabled = true; b.textContent = "Procesando…"; }, 0); }
+    });
+  });
+</script>
 </body>
 </html>
