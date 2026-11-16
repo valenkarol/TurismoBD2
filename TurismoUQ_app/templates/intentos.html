@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block titulo %}Intentos fallidos{% endblock %}
+{% block contenido %}
+<h1>Intentos fallidos de reserva con pago</h1>
+<p class="suave">Últimos 100 intentos que terminaron en ROLLBACK. La reserva no quedó guardada,
+   pero el intento sí: lo registra una transacción autónoma (script 13).</p>
+<table class="tarjeta">
+  <tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Cliente</th><th>Hab.</th><th>Llegada</th><th>Salida</th>
+      <th class="num">Pago</th><th>Método</th><th>Error</th></tr>
+  {% for f in filas %}
+  <tr><td>{{ f.id_intento }}</td><td>{{ f.fecha_intento|fecha_hora }}</td>
+      <td>{{ f.usuario_app or f.usuario_bd }}</td><td>{{ f.id_cliente or '—' }}</td>
+      <td>{{ f.id_habitacion or '—' }}</td><td>{{ f.fecha_checkin|fecha }}</td><td>{{ f.fecha_checkout|fecha }}</td>
+      <td class="num">{{ f.valor_pago|dinero }}</td><td>{{ f.metodo_pago or '—' }}</td>
+      <td>{{ f.mensaje_error }}</td></tr>
+  {% else %}<tr><td colspan="10" class="suave">Aún no hay intentos fallidos.</td></tr>{% endfor %}
+</table>
+{% endblock %}

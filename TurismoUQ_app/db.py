@@ -1,9 +1,3 @@
-"""
-db.py  ·  Conexión a Oracle (esquema TURISMOUQ)
-
-Todo lo que habla con la base de datos pasa por aquí.
-Usa python-oracledb en modo "thin": NO necesita instalar Oracle Instant Client.
-"""
 import os
 from contextlib import contextmanager
 
@@ -114,7 +108,7 @@ def consultar_uno(sql, params=None):
 def mensaje_error(error):
     """Convierte un error de Oracle en un texto entendible.
 
-    Los errores propios del paquete (ORA-20001 ... ORA-20013) ya traen un
+    Los errores propios del paquete (ORA-20001 ... ORA-20014) ya traen un
     mensaje en español; se quita el prefijo 'ORA-200xx:' y las líneas
     'ORA-06512' (pila de llamadas)."""
     err = error.args[0]
@@ -128,6 +122,13 @@ def mensaje_error(error):
     if "DPY-6005" in texto or "DPY-6000" in texto:
         return ("No se pudo conectar a Oracle. Revisa que la base esté encendida "
                 "y los datos del archivo .env.")
+    # Entrega 3 · Concurrencia: errores de bloqueo que puede devolver Oracle
+    if "ORA-30006" in texto or "ORA-00054" in texto:
+        return ("Otro usuario está usando ese registro en este momento. "
+                "Intenta de nuevo en unos segundos.")
+    if "ORA-00060" in texto:
+        return ("Dos operaciones se bloquearon entre sí (interbloqueo) y Oracle "
+                "canceló esta. Vuelve a intentarlo.")
     primera_linea = texto.splitlines()[0] if texto else str(err)
     codigo = getattr(err, "code", 0)
     if 20000 <= codigo <= 20999 and ":" in primera_linea:

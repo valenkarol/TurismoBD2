@@ -1,10 +1,3 @@
-"""
-app.py  ·  Interfaz web de TurismoUQ (Flask)
-
-Ejecutar:  python app.py   y abrir  http://127.0.0.1:5000
-Usuarios de prueba (script 06): recepcion1, admin_aloj1, gerente1, auditor1
-Clave de todos: Turismo2026*
-"""
 import hashlib
 import os
 from datetime import date, datetime, timedelta
@@ -19,6 +12,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "clave-de-desarrollo")
 
 PKG = "PKG_TURISMOUQ"
+PKG_TX = "PKG_TURISMOUQ_TX"   # Entrega 3: reserva + pago en una sola transacción
 METODOS_PAGO = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "PSE"]
 ESTADOS_RESERVA = ["PENDIENTE", "CONFIRMADA", "CANCELADA", "FINALIZADA"]
 TIPOS_DOCUMENTO = ["CC", "CE", "PASAPORTE"]
@@ -214,7 +208,10 @@ def buscar():
 
 
 # ---------------------------------------------------------------------
-# Crear reserva  ->  sp_registrar_cliente + sp_crear_reserva (una sola transacción)
+# Crear reserva (una sola transacción)
+#   Sin pago inicial -> sp_registrar_cliente + sp_crear_reserva
+#   Con pago inicial -> sp_registrar_cliente + PKG_TURISMOUQ_TX.sp_reservar_con_pago
+#                       (Entrega 3: reserva y pago atómicos, con SAVEPOINT)
 # ---------------------------------------------------------------------
 @app.route("/reservar", methods=["GET", "POST"])
 @login_requerido(*ROLES_OPERACION)
@@ -242,6 +239,10 @@ def reservar():
 
     if request.method == "POST":
         f = request.form
+        # Pago inicial (opcional). Si viene, reserva y pago van en la misma transacción.
+        texto_pago = f.get("valor_pago", "").replace(".", "").replace(",", "").strip()
+        valor_pago = float(texto_pago) if texto_pago.isdigit() and int(texto_pago) > 0 else None
+        aviso = None
         try:
             with db.conexion() as con:
                 with con.cursor() as cur:
@@ -252,15 +253,39 @@ def reservar():
                         f.get("telefono"), f.get("correo"), id_cliente, "N",
                     ])
                     id_reserva = cur.var(oracledb.DB_TYPE_NUMBER)
-                    valor = cur.var(oracledb.DB_TYPE_NUMBER)
-                    cur.callproc(f"{PKG}.sp_crear_reserva", [
-                        int(id_cliente.getvalue()), id_habitacion, fecha_in, fecha_out,
-                        huespedes, id_reserva, valor, session["usuario"]["id"], "N",
-                    ])
-                con.commit()  # cliente + reserva quedan juntos o no queda nada
+                    if valor_pago:
+                        # Entrega 3 · Transacciones. Parámetros en el orden del paquete:
+                        # cliente, habitación, fechas, huéspedes, valor y método del pago,
+                        # (salidas) reserva, pago, aviso, servicio, cantidad, usuario, commit
+                        id_pago = cur.var(oracledb.DB_TYPE_NUMBER)
+                        aviso_bd = cur.var(oracledb.DB_TYPE_VARCHAR, 600)
+                        cur.callproc(f"{PKG_TX}.sp_reservar_con_pago", [
+                            int(id_cliente.getvalue()), id_habitacion, fecha_in, fecha_out,
+                            huespedes, valor_pago, f.get("metodo_pago"),
+                            id_reserva, id_pago, aviso_bd,
+                            a_entero(f.get("id_servicio")),
+                            a_entero(f.get("cantidad_servicio")) or 1,
+                            session["usuario"]["id"], "N",
+                        ])
+                        aviso = aviso_bd.getvalue()
+                    else:
+                        valor = cur.var(oracledb.DB_TYPE_NUMBER)
+                        cur.callproc(f"{PKG}.sp_crear_reserva", [
+                            int(id_cliente.getvalue()), id_habitacion, fecha_in, fecha_out,
+                            huespedes, id_reserva, valor, session["usuario"]["id"], "N",
+                        ])
+                # Único COMMIT: cliente + reserva (+ pago) quedan juntos o no queda nada.
+                # Si hubo error no se llega aquí y Oracle descarta todo al devolver la conexión.
+                con.commit()
             nueva = int(id_reserva.getvalue())
-            flash(f"Reserva #{nueva} creada por {filtro_dinero(valor.getvalue())}. "
-                  "Registra un pago del 30 % para confirmarla.", "ok")
+            if valor_pago:
+                flash(f"Reserva #{nueva} creada y pago de {filtro_dinero(valor_pago)} "
+                      "registrado en una sola transacción.", "ok")
+                if aviso:
+                    flash(aviso, "error")   # rollback parcial: el servicio no se agregó
+            else:
+                flash(f"Reserva #{nueva} creada por {filtro_dinero(valor.getvalue())}. "
+                      "Registra un pago del 30 % para confirmarla.", "ok")
             return redirect(url_for("reserva_detalle", id_reserva=nueva))
         except oracledb.DatabaseError as e:
             flash(db.mensaje_error(e), "error")
@@ -276,9 +301,11 @@ def reservar():
     except oracledb.DatabaseError as e:
         flash(db.mensaje_error(e), "error")
 
+    catalogo = db.consultar("SELECT id_servicio, nombre, precio FROM SERVICIO ORDER BY nombre")
     return render_template("reservar.html", habitacion=habitacion, fecha_in=fecha_in,
                            fecha_out=fecha_out, huespedes=huespedes, desglose=desglose,
-                           total=total, tipos_documento=TIPOS_DOCUMENTO, form=request.form)
+                           total=total, tipos_documento=TIPOS_DOCUMENTO, form=request.form,
+                           metodos=METODOS_PAGO, catalogo=catalogo)
 
 
 # ---------------------------------------------------------------------
@@ -486,6 +513,26 @@ def auditoria():
            FETCH FIRST 100 ROWS ONLY"""
     )
     return render_template("auditoria.html", filas=filas)
+
+
+# ---------------------------------------------------------------------
+# Entrega 3 · Intentos fallidos de reserva con pago
+# (bitácora que llena la transacción autónoma del script 13)
+# ---------------------------------------------------------------------
+@app.route("/intentos")
+@login_requerido(*ROLES_AUDITORIA)
+def intentos():
+    filas = db.consultar(
+        """SELECT l.id_intento, l.fecha_intento, l.usuario_bd,
+                  u.nombre_usuario AS usuario_app,
+                  l.id_cliente, l.id_habitacion, l.fecha_checkin, l.fecha_checkout,
+                  l.valor_pago, l.metodo_pago, l.codigo_error, l.mensaje_error
+           FROM LOG_INTENTO_FALLIDO l
+           LEFT JOIN USUARIO_SISTEMA u ON u.id_usuario = l.id_usuario_app
+           ORDER BY l.id_intento DESC
+           FETCH FIRST 100 ROWS ONLY"""
+    )
+    return render_template("intentos.html", filas=filas)
 
 
 # ---------------------------------------------------------------------

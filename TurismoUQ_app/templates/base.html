@@ -17,6 +17,7 @@
     <a href="{{ url_for('clientes') }}">Clientes</a>
     {% if usuario.rol in ROLES_LIQUIDACION %}<a href="{{ url_for('liquidacion') }}">Liquidación</a>{% endif %}
     {% if usuario.rol in ROLES_AUDITORIA %}<a href="{{ url_for('auditoria') }}">Auditoría</a>{% endif %}
+    {% if usuario.rol in ROLES_AUDITORIA %}<a href="{{ url_for('intentos') }}">Intentos fallidos</a>{% endif %}
   </nav>
   <div class="quien">{{ usuario.nombre }} <span class="rol">{{ usuario.rol }}</span>
     <a href="{{ url_for('salir') }}">Salir</a></div>

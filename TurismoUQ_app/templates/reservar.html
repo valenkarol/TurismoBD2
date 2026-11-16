@@ -40,6 +40,20 @@
       <label>Teléfono <input name="telefono" value="{{ form.telefono }}"></label>
       <label>Correo <input type="email" name="correo" value="{{ form.correo }}"></label>
     </div>
+    <h2>Pago inicial <span class="suave pequeno">(opcional)</span></h2>
+    <p class="suave pequeno">Si registras el pago aquí, la reserva y el pago se guardan en una sola
+       transacción: si el pago falla, la reserva tampoco queda. Con el 30 % queda CONFIRMADA.
+       Deja el valor vacío para reservar sin pagar.</p>
+    <div class="fila">
+      <label>Valor <input type="number" name="valor_pago" min="0" step="1"
+             value="{{ form.valor_pago if form.valor_pago is defined else ((total * 0.3)|round(0, 'ceil')|int if total else '') }}"></label>
+      <label>Método <select name="metodo_pago">{% for m in metodos %}<option {% if form.metodo_pago == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="fila">
+      <label>Servicio adicional <span class="suave pequeno">(solo con pago)</span>
+        <select name="id_servicio"><option value="">— Ninguno —</option>{% for s in catalogo %}<option value="{{ s.id_servicio }}" {% if form.id_servicio == s.id_servicio|string %}selected{% endif %}>{{ s.nombre }} ({{ s.precio|dinero }})</option>{% endfor %}</select></label>
+      <label>Cantidad <input type="number" name="cantidad_servicio" min="1" value="{{ form.cantidad_servicio or 1 }}"></label>
+    </div>
     <button>Confirmar reserva</button>
     <a href="{{ url_for('buscar') }}" class="enlace">Volver a la búsqueda</a>
   </form>
