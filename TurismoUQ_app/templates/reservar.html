@@ -52,8 +52,12 @@
     <div class="fila">
       <label>Servicio adicional <span class="suave pequeno">(solo con pago)</span>
         <select name="id_servicio"><option value="">— Ninguno —</option>{% for s in catalogo %}<option value="{{ s.id_servicio }}" {% if form.id_servicio == s.id_servicio|string %}selected{% endif %}>{{ s.nombre }} ({{ s.precio|dinero }})</option>{% endfor %}</select></label>
-      <label>Cantidad <input type="number" name="cantidad_servicio" min="1" value="{{ form.cantidad_servicio or 1 }}"></label>
+      <label>Cantidad <input type="number" name="cantidad_servicio" min="0" value="{{ form.cantidad_servicio or 1 }}"></label>
     </div>
+    {% if PAUSA_DEMO_SEG %}
+    <p class="aviso error pequeno">Modo demostración de concurrencia: la reserva tarda {{ PAUSA_DEMO_SEG }} s
+       en confirmarse y durante ese tiempo la habitación queda bloqueada.</p>
+    {% endif %}
     <button>Confirmar reserva</button>
     <a href="{{ url_for('buscar') }}" class="enlace">Volver a la búsqueda</a>
   </form>

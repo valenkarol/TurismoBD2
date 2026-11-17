@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block titulo %}Consultas{% endblock %}
+{% macro tiempo_y_plan(clave) %}
+  <p><span class="tiempo">Oracle respondió en {{ r.ms }} ms</span>
+     <span class="suave pequeno">· {{ r.filas|length }} fila(s)</span></p>
+  {% if r.plan %}
+  <details class="plan" open>
+    <summary>Plan de ejecución (EXPLAIN PLAN)</summary>
+    <pre class="plan">{{ r.plan }}</pre>
+  </details>
+  {% endif %}
+  <details class="plan">
+    <summary>Ver la consulta SQL</summary>
+    <pre class="sql">{{ sql[clave] }}</pre>
+  </details>
+{% endmacro %}
+{% block contenido %}
+<h1>Consultas</h1>
+<p class="suave">Índices de la entrega 3 y consultas de la sustentación. Cada consulta muestra el resultado,
+   el tiempo de respuesta de Oracle y, en las de índices, el plan de ejecución con el índice que se usó.</p>
+
+<!-- ============================================================ ÍNDICES -->
+<h2 class="seccion">Índices · las tres consultas lentas (script 15)</h2>
+
+<form method="get" class="tarjeta">
+  <input type="hidden" name="ver" value="c1">
+  <h2>C1 · Cierre de caja por método de pago <span class="suave pequeno">índice compuesto IX_PAGO_METODO_ESTADO_FECHA</span></h2>
+  <div class="fila">
+    <label>Método <select name="metodo">{% for m in metodos %}<option {% if p.metodo == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+    <label>Estado <select name="estado">{% for e in estados_pago %}<option {% if p.estado == e %}selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+    <label>Desde <input type="date" name="desde" value="{{ p.desde }}" required></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ p.hasta }}" required></label>
+  </div>
+  <button>Consultar</button>
+  {% if r.ver == 'c1' %}
+    {{ tiempo_y_plan('c1') }}
+    <table>
+      <tr><th>Pago</th><th>Reserva</th><th>Fecha</th><th class="num">Valor</th></tr>
+      {% for f in r.filas %}
+      <tr><td>{{ f.id_pago }}</td><td><a href="{{ url_for('reserva_detalle', id_reserva=f.id_reserva) }}">{{ f.id_reserva }}</a></td>
+          <td>{{ f.fecha_pago|fecha_hora }}</td><td class="num">{{ f.valor|dinero }}</td></tr>
+      {% else %}<tr><td colspan="4" class="suave">Sin pagos en ese rango.</td></tr>{% endfor %}
+      {% if r.filas %}<tr class="total"><td colspan="3">Total</td><td class="num">{{ r.filas|sum(attribute='valor')|dinero }}</td></tr>{% endif %}
+    </table>
+  {% endif %}
+</form>
+
+<form method="get" class="tarjeta">
+  <input type="hidden" name="ver" value="c2">
+  <h2>C2 · Buscar cliente por apellido <span class="suave pequeno">índice basado en función IX_CLIENTE_APELLIDOS_UPPER</span></h2>
+  <p class="suave pequeno">No importa si se escribe en mayúsculas o minúsculas: la consulta compara UPPER(apellidos).</p>
+  <div class="fila">
+    <label>Apellido <input name="apellido" value="{{ p.apellido }}" required></label>
+  </div>
+  <button>Buscar</button>
+  {% if r.ver == 'c2' %}
+    {{ tiempo_y_plan('c2') }}
+    <table>
+      <tr><th>Documento</th><th>Nombre</th><th>Teléfono</th><th>Correo</th></tr>
+      {% for f in r.filas %}
+      <tr><td>{{ f.tipo_documento }} {{ f.numero_documento }}</td><td>{{ f.nombres }} {{ f.apellidos }}</td>
+          <td>{{ f.telefono or '—' }}</td><td>{{ f.correo or '—' }}</td></tr>
+      {% else %}<tr><td colspan="4" class="suave">No hay clientes con ese apellido.</td></tr>{% endfor %}
+    </table>
+  {% endif %}
+</form>
+
+<form method="get" class="tarjeta">
+  <input type="hidden" name="ver" value="c3">
+  <h2>C3 · Ventas de un servicio <span class="suave pequeno">índice compuesto que cubre la consulta IX_RS_SERVICIO_VENTA</span></h2>
+  <div class="fila">
+    <label>Servicio <select name="id_servicio">{% for s in servicios %}<option value="{{ s.id_servicio }}" {% if p.id_servicio == s.id_servicio %}selected{% endif %}>{{ s.id_servicio }} · {{ s.nombre }}</option>{% endfor %}</select></label>
+  </div>
+  <button>Consultar</button>
+  {% if r.ver == 'c3' %}
+    {{ tiempo_y_plan('c3') }}
+    {% set v = r.filas[0] %}
+    <div class="cifras">
+      <div class="cifra"><span>{{ v.lineas }}</span>Líneas vendidas</div>
+      <div class="cifra"><span>{{ v.unidades or 0 }}</span>Unidades</div>
+      <div class="cifra"><span>{{ v.ingreso|dinero }}</span>Ingreso</div>
+    </div>
+  {% endif %}
+</form>
+
+<section class="tarjeta">
+  <h2>Medición antes y después de crear los índices</h2>
+  {% if medicion %}
+  <p class="suave pequeno">Resultados guardados por el script 15 (tabla E3_MEDICION). El tiempo es el total de todas las repeticiones.</p>
+  <table>
+    <tr><th>Consulta</th><th class="num">Costo antes</th><th class="num">Costo después</th>
+        <th class="num">ms antes</th><th class="num">ms después</th><th>Acceso después</th></tr>
+    {% for m in medicion %}
+    <tr><td><b>{{ m.codigo }}</b> · {{ m.descripcion }}<br><span class="suave pequeno">{{ m.repeticiones }} ejecuciones</span></td>
+        <td class="num">{{ m.costo_antes }}</td><td class="num">{{ m.costo_despues }}</td>
+        <td class="num">{{ m.ms_antes }}</td><td class="num">{{ m.ms_despues }}</td>
+        <td class="pequeno">{{ m.acceso_despues }}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="suave pequeno">C4 es el caso donde el índice no ayuda: <b>estado</b> tiene 4 valores y cada uno es cerca del 25 % de las
+     reservas, así que leer la tabla completa sale más barato y Oracle ignora el índice. C5 es la misma consulta
+     obligada a usarlo: su costo sube.</p>
+  {% else %}
+  <p class="suave">Aún no hay mediciones. Ejecuta el script 15_indices_E3.sql en SQL Developer y recarga esta página.</p>
+  {% endif %}
+</section>
+
+<!-- ============================================================ SUSTENTACIÓN -->
+<h2 class="seccion">Consultas de la sustentación (script 16)</h2>
+
+<form method="get" class="tarjeta">
+  <input type="hidden" name="ver" value="q1">
+  <h2>1 · ¿Cuál fue la habitación con más reservas en temporada alta?</h2>
+  <p class="suave pequeno">Temporada alta = julio a septiembre y diciembre. Cuenta las reservas no canceladas con al menos una noche en temporada alta.</p>
+  <div class="fila">
+    <label>Año <select name="anio"><option value="">Todos</option>{% for a in (2024, 2025, 2026, 2027) %}<option {% if p.anio == a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+  </div>
+  <button>Consultar</button>
+  {% if r.ver == 'q1' %}
+    <p><span class="tiempo">Oracle respondió en {{ r.ms }} ms</span></p>
+    <table>
+      <tr><th>#</th><th>Habitación</th><th>Alojamiento</th><th>Municipio</th><th class="num">Reservas en alta</th><th class="num">Noches en alta</th></tr>
+      {% for f in r.filas %}
+      <tr {% if f.posicion == 1 %}class="primero"{% endif %}><td>{{ f.posicion }}</td><td>{{ f.habitacion }} · {{ f.tipo_habitacion }}</td>
+          <td>{{ f.alojamiento }}</td><td>{{ f.municipio }}</td>
+          <td class="num">{{ f.reservas_temporada_alta }}</td><td class="num">{{ f.noches_temporada_alta }}</td></tr>
+      {% else %}<tr><td colspan="6" class="suave">Sin reservas en temporada alta.</td></tr>{% endfor %}
+    </table>
+    <details class="plan"><summary>Ver la consulta SQL</summary><pre class="sql">{{ sql.q1 }}</pre></details>
+  {% endif %}
+</form>
+
+<form method="get" class="tarjeta">
+  <input type="hidden" name="ver" value="q2a">
+  <h2>2 · Clientes que han reservado en más municipios</h2>
+  <p class="suave pequeno">Municipios distintos donde cada cliente tiene reservas no canceladas. En empate, primero el de más reservas.</p>
+  <button>Consultar</button>
+  {% if r.ver == 'q2a' %}
+    <p><span class="tiempo">Oracle respondió en {{ r.ms }} ms</span></p>
+    <table>
+      <tr><th>#</th><th>Cliente</th><th>Documento</th><th class="num">Municipios</th><th class="num">Reservas</th><th>Dónde</th></tr>
+      {% for f in r.filas %}
+      <tr {% if f.posicion == 1 %}class="primero"{% endif %}><td>{{ f.posicion }}</td><td>{{ f.cliente }}</td><td>{{ f.documento }}</td>
+          <td class="num">{{ f.municipios_distintos }}</td><td class="num">{{ f.reservas }}</td><td class="pequeno">{{ f.municipios }}</td></tr>
+      {% endfor %}
+    </table>
+    <details class="plan"><summary>Ver la consulta SQL</summary><pre class="sql">{{ sql.q2a }}</pre></details>
+  {% endif %}
+</form>
+
+<form method="get" class="tarjeta">
+  <input type="hidden" name="ver" value="q2b">
+  <h2>2 (variante) · El cliente con más reservas en cada municipio</h2>
+  <button>Consultar</button>
+  {% if r.ver == 'q2b' %}
+    <p><span class="tiempo">Oracle respondió en {{ r.ms }} ms</span></p>
+    <table>
+      <tr><th>Municipio</th><th>Cliente</th><th>Documento</th><th class="num">Reservas</th></tr>
+      {% for f in r.filas %}
+      <tr><td>{{ f.municipio }}</td><td>{{ f.cliente }}</td><td>{{ f.documento }}</td><td class="num">{{ f.reservas }}</td></tr>
+      {% endfor %}
+    </table>
+    <details class="plan"><summary>Ver la consulta SQL</summary><pre class="sql">{{ sql.q2b }}</pre></details>
+  {% endif %}
+</form>
+{% endblock %}

@@ -22,7 +22,7 @@ h1 { font-size: 1.6rem; margin: 0 0 1rem; display: flex; gap: .6rem; align-items
 h2 { font-size: 1.1rem; margin: 0 0 .8rem; }
 h3 { font-size: .95rem; margin: 1.2rem 0 .4rem; color: var(--suave); }
 
-/* Barra superior */
+
 .barra {
   display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
   background: var(--verde); color: #fff; padding: .7rem 1.5rem;
@@ -37,7 +37,7 @@ h3 { font-size: .95rem; margin: 1.2rem 0 .4rem; color: var(--suave); }
 
 .contenido { max-width: 1150px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
 
-/* Tarjetas y formularios */
+
 .tarjeta {
   background: #fff; border: 1px solid var(--borde); border-radius: 10px;
   padding: 1.2rem; margin-bottom: 1rem;
@@ -70,21 +70,18 @@ tr:last-child td { border-bottom: 0; }
 .num { text-align: right; white-space: nowrap; }
 tr.total td { font-weight: 700; border-top: 2px solid var(--borde); }
 
-/* Cifras de resumen */
 .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
 .cifra { background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 1rem; color: var(--suave); font-size: .85rem; }
 .cifra span { display: block; font-size: 1.5rem; color: var(--texto); font-weight: 600; }
 
 .dos-columnas { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; align-items: start; }
 
-/* Estados de reserva */
 .estado { font-size: .75rem; padding: .15rem .55rem; border-radius: 99px; font-weight: 600; background: #eee; }
 .estado.pendiente  { background: #fff3cd; color: #7a5b00; }
 .estado.confirmada { background: var(--verde-claro); color: var(--verde); }
 .estado.cancelada  { background: #fde8e7; color: var(--rojo); }
 .estado.finalizada { background: #e8eaf6; color: #3949ab; }
 
-/* Avisos */
 .aviso { padding: .8rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
 .aviso.ok { background: var(--verde-claro); color: var(--verde); }
 .aviso.error { background: #fde8e7; color: var(--rojo); }
@@ -102,3 +99,14 @@ tr.total td { font-weight: 700; border-top: 2px solid var(--borde); }
   .barra { padding: .7rem 1rem; gap: .8rem; }
   .dos-columnas { grid-template-columns: 1fr; }
 }
+/* Entrega 3 · pantalla de consultas */
+details.plan { margin-top: .6rem; }
+details.plan summary { cursor: pointer; color: var(--verde); font-size: .9rem; }
+pre.plan, pre.sql {
+  background: #fff; border: 1px solid var(--borde); border-radius: 8px;
+  padding: .7rem .9rem; font-size: .75rem; line-height: 1.35; overflow-x: auto; white-space: pre;
+}
+.tiempo { display: inline-block; background: var(--verde-claro); color: var(--verde);
+  border-radius: 99px; padding: .15rem .7rem; font-size: .85rem; font-weight: 600; }
+tr.primero td { background: var(--verde-claro); font-weight: 600; }
+.seccion { margin-top: 2rem; }

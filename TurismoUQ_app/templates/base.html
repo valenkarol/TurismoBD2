@@ -15,6 +15,7 @@
     {% if usuario.rol in ROLES_OPERACION %}<a href="{{ url_for('buscar') }}">Buscar y reservar</a>{% endif %}
     <a href="{{ url_for('reservas') }}">Reservas</a>
     <a href="{{ url_for('clientes') }}">Clientes</a>
+    <a href="{{ url_for('consultas') }}">Consultas</a>
     {% if usuario.rol in ROLES_LIQUIDACION %}<a href="{{ url_for('liquidacion') }}">Liquidación</a>{% endif %}
     {% if usuario.rol in ROLES_AUDITORIA %}<a href="{{ url_for('auditoria') }}">Auditoría</a>{% endif %}
     {% if usuario.rol in ROLES_AUDITORIA %}<a href="{{ url_for('intentos') }}">Intentos fallidos</a>{% endif %}

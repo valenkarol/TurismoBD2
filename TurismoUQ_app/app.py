@@ -1,5 +1,7 @@
 import hashlib
 import os
+import time
+import uuid
 from datetime import date, datetime, timedelta
 from functools import wraps
 
@@ -16,6 +18,15 @@ PKG_TX = "PKG_TURISMOUQ_TX"   # Entrega 3: reserva + pago en una sola transacci�
 METODOS_PAGO = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "PSE"]
 ESTADOS_RESERVA = ["PENDIENTE", "CONFIRMADA", "CANCELADA", "FINALIZADA"]
 TIPOS_DOCUMENTO = ["CC", "CE", "PASAPORTE"]
+ESTADOS_PAGO = ["APROBADO", "PENDIENTE", "RECHAZADO"]
+
+# Entrega 3 · Demostración de concurrencia desde la interfaz.
+# Con DEMO_CONCURRENCIA_SEG=10 en el archivo .env, al confirmar una reserva la
+# transacción se queda abierta 10 segundos ANTES del COMMIT (la habitación sigue
+# bloqueada por SELECT ... FOR UPDATE). Así dos navegadores pueden intentar
+# reservar la misma habitación "al mismo tiempo". En 0 (o sin la variable) la
+# app funciona normal.
+PAUSA_DEMO_SEG = min(int(os.getenv("DEMO_CONCURRENCIA_SEG", "0") or 0), 15)
 
 # Qué rol puede entrar a cada sección
 ROLES_OPERACION = ("RECEPCION", "ADMINISTRADOR", "GERENTE")
@@ -51,7 +62,8 @@ def filtro_fecha_hora(valor):
 @app.context_processor
 def variables_globales():
     return {"usuario": session.get("usuario"), "ROLES_OPERACION": ROLES_OPERACION,
-            "ROLES_LIQUIDACION": ROLES_LIQUIDACION, "ROLES_AUDITORIA": ROLES_AUDITORIA}
+            "ROLES_LIQUIDACION": ROLES_LIQUIDACION, "ROLES_AUDITORIA": ROLES_AUDITORIA,
+            "PAUSA_DEMO_SEG": PAUSA_DEMO_SEG}
 
 
 def a_fecha(texto):
@@ -264,7 +276,9 @@ def reservar():
                             huespedes, valor_pago, f.get("metodo_pago"),
                             id_reserva, id_pago, aviso_bd,
                             a_entero(f.get("id_servicio")),
-                            a_entero(f.get("cantidad_servicio")) or 1,
+                            # 0 se envía tal cual: Oracle lo rechaza y se ve el ROLLBACK PARCIAL
+                            1 if a_entero(f.get("cantidad_servicio")) is None
+                            else a_entero(f.get("cantidad_servicio")),
                             session["usuario"]["id"], "N",
                         ])
                         aviso = aviso_bd.getvalue()
@@ -274,6 +288,9 @@ def reservar():
                             int(id_cliente.getvalue()), id_habitacion, fecha_in, fecha_out,
                             huespedes, id_reserva, valor, session["usuario"]["id"], "N",
                         ])
+                # Demostración de concurrencia: la habitación sigue bloqueada mientras dura la pausa
+                if PAUSA_DEMO_SEG:
+                    time.sleep(PAUSA_DEMO_SEG)
                 # Único COMMIT: cliente + reserva (+ pago) quedan juntos o no queda nada.
                 # Si hubo error no se llega aquí y Oracle descarta todo al devolver la conexión.
                 con.commit()
@@ -536,5 +553,209 @@ def intentos():
 
 
 # ---------------------------------------------------------------------
+# Entrega 3 · Índices + consultas de la sustentación
+#   C1, C2, C3 = las tres consultas lentas del script 15 (mismo texto, con
+#   variables de enlace). Se muestra el resultado, cuánto tardó Oracle y el
+#   plan de ejecución, donde se ve qué índice usó.
+#   Q1, Q2A, Q2B = las consultas de la profesora (script 16).
+# ---------------------------------------------------------------------
+SQL_C1 = """SELECT id_pago, id_reserva, fecha_pago, valor
+FROM PAGO
+WHERE metodo_pago = :metodo
+  AND estado = :estado
+  AND fecha_pago >= :desde
+  AND fecha_pago <  :hasta
+ORDER BY fecha_pago"""
+
+SQL_C2 = """SELECT id_cliente, tipo_documento, numero_documento, nombres, apellidos, telefono, correo
+FROM CLIENTE
+WHERE UPPER(apellidos) = UPPER(:apellido)"""
+
+SQL_C3 = """SELECT COUNT(*) AS lineas,
+       SUM(cantidad) AS unidades,
+       SUM(cantidad * precio_unitario) AS ingreso
+FROM RESERVA_SERVICIO
+WHERE id_servicio = :id_servicio"""
+
+SQL_Q1 = """SELECT posicion, habitacion, tipo_habitacion, alojamiento, municipio,
+       reservas_temporada_alta, noches_temporada_alta
+FROM (
+    SELECT h.numero                     AS habitacion,
+           h.tipo                       AS tipo_habitacion,
+           a.nombre                     AS alojamiento,
+           m.nombre                     AS municipio,
+           COUNT(DISTINCT r.id_reserva) AS reservas_temporada_alta,
+           SUM(LEAST(r.fecha_checkout, te.fecha_fin)
+               - GREATEST(r.fecha_checkin, te.fecha_inicio)) AS noches_temporada_alta,
+           RANK() OVER (ORDER BY COUNT(DISTINCT r.id_reserva) DESC) AS posicion
+    FROM RESERVA r
+    JOIN RESERVA_HABITACION rh ON rh.id_reserva    = r.id_reserva
+    JOIN TEMPORADA te          ON te.tipo          = 'ALTA'
+                              AND r.fecha_checkin  < te.fecha_fin
+                              AND r.fecha_checkout > te.fecha_inicio
+    JOIN HABITACION h          ON h.id_habitacion  = rh.id_habitacion
+    JOIN ALOJAMIENTO a         ON a.id_alojamiento = h.id_alojamiento
+    JOIN MUNICIPIO m           ON m.id_municipio   = a.id_municipio
+    WHERE r.estado <> 'CANCELADA'
+      AND (:anio IS NULL OR EXTRACT(YEAR FROM te.fecha_inicio) = :anio)
+    GROUP BY h.id_habitacion, h.numero, h.tipo, a.nombre, m.nombre
+)
+WHERE posicion <= 10
+ORDER BY posicion, habitacion"""
+
+SQL_Q2A = """SELECT posicion, documento, cliente, municipios_distintos, reservas, municipios
+FROM (
+    SELECT c.tipo_documento || ' ' || c.numero_documento AS documento,
+           c.nombres || ' ' || c.apellidos               AS cliente,
+           COUNT(DISTINCT m.id_municipio)                AS municipios_distintos,
+           COUNT(DISTINCT r.id_reserva)                  AS reservas,
+           LISTAGG(DISTINCT m.nombre, ', ')
+               WITHIN GROUP (ORDER BY m.nombre)          AS municipios,
+           RANK() OVER (ORDER BY COUNT(DISTINCT m.id_municipio) DESC,
+                                 COUNT(DISTINCT r.id_reserva)   DESC) AS posicion
+    FROM CLIENTE c
+    JOIN RESERVA r             ON r.id_cliente     = c.id_cliente
+    JOIN RESERVA_HABITACION rh ON rh.id_reserva    = r.id_reserva
+    JOIN HABITACION h          ON h.id_habitacion  = rh.id_habitacion
+    JOIN ALOJAMIENTO a         ON a.id_alojamiento = h.id_alojamiento
+    JOIN MUNICIPIO m           ON m.id_municipio   = a.id_municipio
+    WHERE r.estado <> 'CANCELADA'
+    GROUP BY c.id_cliente, c.tipo_documento, c.numero_documento, c.nombres, c.apellidos
+)
+WHERE posicion <= 20
+ORDER BY posicion, cliente"""
+
+SQL_Q2B = """SELECT municipio, documento, cliente, reservas
+FROM (
+    SELECT m.nombre                                      AS municipio,
+           c.tipo_documento || ' ' || c.numero_documento AS documento,
+           c.nombres || ' ' || c.apellidos               AS cliente,
+           COUNT(DISTINCT r.id_reserva)                  AS reservas,
+           RANK() OVER (PARTITION BY m.id_municipio
+                        ORDER BY COUNT(DISTINCT r.id_reserva) DESC) AS posicion
+    FROM CLIENTE c
+    JOIN RESERVA r             ON r.id_cliente     = c.id_cliente
+    JOIN RESERVA_HABITACION rh ON rh.id_reserva    = r.id_reserva
+    JOIN HABITACION h          ON h.id_habitacion  = rh.id_habitacion
+    JOIN ALOJAMIENTO a         ON a.id_alojamiento = h.id_alojamiento
+    JOIN MUNICIPIO m           ON m.id_municipio   = a.id_municipio
+    WHERE r.estado <> 'CANCELADA'
+    GROUP BY m.id_municipio, m.nombre, c.id_cliente, c.tipo_documento,
+             c.numero_documento, c.nombres, c.apellidos
+)
+WHERE posicion = 1
+ORDER BY municipio, cliente"""
+
+
+def _literal_texto(valor):
+    """Texto -> literal SQL seguro ('O''Brien'). Solo se usa para EXPLAIN PLAN."""
+    return "'" + str(valor).replace("'", "''")[:100] + "'"
+
+
+def _literal_fecha(valor):
+    return "DATE '" + valor.isoformat() + "'"
+
+
+def plan_ejecucion(sql_con_literales):
+    """Plan de ejecución de una consulta (EXPLAIN PLAN + DBMS_XPLAN.DISPLAY).
+    EXPLAIN PLAN no ejecuta la consulta: solo pide a Oracle el plan que usaría.
+    Los valores van como literales ya validados porque EXPLAIN PLAN no recibe
+    variables de enlace con valor."""
+    id_plan = "WEB_" + uuid.uuid4().hex[:12].upper()
+    try:
+        with db.conexion() as con:
+            with con.cursor() as cur:
+                cur.execute(f"EXPLAIN PLAN SET STATEMENT_ID = '{id_plan}' FOR {sql_con_literales}")
+                cur.execute("SELECT plan_table_output "
+                            "FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', :id, 'TYPICAL'))",
+                            {"id": id_plan})
+                lineas = [fila[0] for fila in cur.fetchall()]
+                cur.execute("DELETE FROM plan_table WHERE statement_id = :id", {"id": id_plan})
+            con.commit()
+        return "\n".join(lineas)
+    except oracledb.DatabaseError as e:
+        return "No se pudo obtener el plan: " + db.mensaje_error(e)
+
+
+def _medir(sql, params):
+    """Ejecuta la consulta y devuelve (filas, milisegundos)."""
+    inicio = time.perf_counter()
+    filas = db.consultar(sql, params)
+    return filas, round((time.perf_counter() - inicio) * 1000, 1)
+
+
+@app.route("/consultas")
+@login_requerido(*ROLES_CONSULTA)
+def consultas():
+    ver = request.args.get("ver", "")
+    servicios = db.consultar("SELECT id_servicio, nombre FROM SERVICIO ORDER BY id_servicio")
+    p = {   # valores del formulario (con los del script 15 por defecto)
+        "metodo": request.args.get("metodo") or "PSE",
+        "estado": request.args.get("estado") or "APROBADO",
+        "desde": request.args.get("desde") or "2026-03-20",
+        "hasta": request.args.get("hasta") or "2026-03-23",
+        "apellido": (request.args.get("apellido") or "Apellido1500").strip(),
+        "id_servicio": a_entero(request.args.get("id_servicio")) or 7,
+        "anio": a_entero(request.args.get("anio")),
+    }
+    r = {"ver": ver}   # resultado de la consulta pedida
+
+    try:
+        if ver == "c1":
+            if p["metodo"] not in METODOS_PAGO or p["estado"] not in ESTADOS_PAGO:
+                raise ValueError("Método o estado no válido.")
+            desde = a_fecha(p["desde"])
+            hasta = a_fecha(p["hasta"]) + timedelta(days=1)   # "hasta" incluye ese día
+            r["filas"], r["ms"] = _medir(SQL_C1, {"metodo": p["metodo"], "estado": p["estado"],
+                                                  "desde": desde, "hasta": hasta})
+            r["plan"] = plan_ejecucion(
+                SQL_C1.replace(":metodo", _literal_texto(p["metodo"]))
+                      .replace(":estado", _literal_texto(p["estado"]))
+                      .replace(":desde", _literal_fecha(desde))
+                      .replace(":hasta", _literal_fecha(hasta)))
+        elif ver == "c2":
+            if not p["apellido"]:
+                raise ValueError("Escribe un apellido.")
+            r["filas"], r["ms"] = _medir(SQL_C2, {"apellido": p["apellido"]})
+            r["plan"] = plan_ejecucion(SQL_C2.replace(":apellido", _literal_texto(p["apellido"])))
+        elif ver == "c3":
+            r["filas"], r["ms"] = _medir(SQL_C3, {"id_servicio": p["id_servicio"]})
+            r["plan"] = plan_ejecucion(SQL_C3.replace(":id_servicio", str(int(p["id_servicio"]))))
+        elif ver == "q1":
+            r["filas"], r["ms"] = _medir(SQL_Q1, {"anio": p["anio"]})
+        elif ver == "q2a":
+            r["filas"], r["ms"] = _medir(SQL_Q2A, {})
+        elif ver == "q2b":
+            r["filas"], r["ms"] = _medir(SQL_Q2B, {})
+    except ValueError as e:
+        flash(str(e) if str(e) else "Datos no válidos.", "error")
+        r = {"ver": ""}
+    except oracledb.DatabaseError as e:
+        flash(db.mensaje_error(e), "error")
+        r = {"ver": ""}
+
+    # Medición antes/después que dejó el script 15 (si ya se ejecutó)
+    try:
+        medicion = db.consultar(
+            """SELECT c.codigo, c.descripcion, c.repeticiones,
+                      a.costo AS costo_antes, d.costo AS costo_despues,
+                      a.tiempo_ms AS ms_antes, d.tiempo_ms AS ms_despues,
+                      a.acceso AS acceso_antes, d.acceso AS acceso_despues
+               FROM E3_CONSULTA c
+               JOIN E3_MEDICION a ON a.codigo = c.codigo AND a.momento = 'ANTES'
+               JOIN E3_MEDICION d ON d.codigo = c.codigo AND d.momento = 'DESPUES'
+               ORDER BY c.codigo""")
+    except oracledb.DatabaseError:
+        medicion = None   # el script 15 todavía no se ha ejecutado
+
+    return render_template("consultas.html", p=p, r=r, servicios=servicios,
+                           medicion=medicion, metodos=METODOS_PAGO, estados_pago=ESTADOS_PAGO,
+                           sql={"c1": SQL_C1, "c2": SQL_C2, "c3": SQL_C3,
+                                "q1": SQL_Q1, "q2a": SQL_Q2A, "q2b": SQL_Q2B})
+
+
+# ---------------------------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    # threaded=True: atiende varias peticiones a la vez (necesario para la
+    # demostración de concurrencia con dos navegadores)
+    app.run(debug=True, threaded=True)
