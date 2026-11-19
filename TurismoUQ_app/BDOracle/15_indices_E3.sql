@@ -1,32 +1,3 @@
--- =====================================================================
--- ENTREGA 3 · ÍNDICES
--- Ejecutar como: TURISMOUQ, después de los scripts 00 a 13.
--- Corre completo de arriba a abajo (F5) y se puede repetir.
---
--- Qué pide el enunciado:
---   "Identifiquen 3 consultas lentas, capturen el plan de ejecución
---    antes y después, creen los índices (al menos uno compuesto y uno
---    basado en función) y midan. Incluyan además un caso donde el índice
---    no ayude y expliquen por qué."
---
--- Resumen
---   C1  Cierre de caja por método y fechas   -> índice COMPUESTO
---   C2  Buscar cliente por apellido          -> índice BASADO EN FUNCIÓN
---   C3  Ventas de un servicio                -> índice COMPUESTO que cubre la consulta
---   C4  Reservas por estado                  -> el índice NO ayuda
---   C5  La misma C4 obligando a usar el índice (para medir cuánto empeora)
---
--- Cómo se mide
---   * Plan y costo: EXPLAIN PLAN + DBMS_XPLAN.DISPLAY.
---   * Tiempo: cada consulta se ejecuta muchas veces seguidas y se guarda
---     el total en milisegundos. Con 25.000 reservas una sola ejecución
---     tarda muy poco y el cronómetro no alcanza a notar la diferencia.
---   * Todo queda guardado en la tabla E3_MEDICION (ANTES y DESPUES).
---
--- Nota: los índices del script 12 (ix_rh_habitacion, ix_reserva_fechas,
--- ix_reserva_cliente, ix_pago_reserva, ix_habitacion_alojamiento) siguen
--- igual. Ninguno sirve para estas consultas, por eso arrancan lentas.
--- =====================================================================
 SET SERVEROUTPUT ON SIZE UNLIMITED
 SET DEFINE OFF
 SET LINESIZE 220
@@ -54,11 +25,8 @@ BEGIN
 END;
 /
 
--- ---------------------------------------------------------------------
 -- 1. Las consultas del experimento
---    Se guardan una sola vez en una tabla para medir EXACTAMENTE el
---    mismo texto antes y después de crear los índices.
--- ---------------------------------------------------------------------
+
 CREATE TABLE E3_CONSULTA (
     codigo        VARCHAR2(5)     NOT NULL,
     descripcion   VARCHAR2(200)   NOT NULL,
@@ -79,8 +47,7 @@ CREATE TABLE E3_MEDICION (
     CONSTRAINT ck_e3_medicion_momento CHECK (momento IN ('ANTES', 'DESPUES'))
 );
 
--- C1 · Cierre de caja: pagos PSE aprobados del puente festivo de marzo
---      de 2026. Filtra por dos igualdades y un rango de fechas.
+-- C1 · Cierre de caja: Filtra por dos igualdades y un rango de fechas.
 INSERT INTO E3_CONSULTA (codigo, descripcion, repeticiones, sql_texto)
 VALUES ('C1', 'Cierre de caja: pagos PSE aprobados del 20 al 23 de marzo de 2026', 300,
 q'[SELECT id_pago, id_reserva, fecha_pago, valor
@@ -126,15 +93,7 @@ WHERE r.estado = 'CONFIRMADA']');
 COMMIT;
 
 -- ---------------------------------------------------------------------
--- 2. Procedimiento que mide todas las consultas de E3_CONSULTA
---    p_momento = 'ANTES' o 'DESPUES'
---    Por cada consulta:
---      a) genera el plan con EXPLAIN PLAN (queda en PLAN_TABLE con el
---         identificador C1_ANTES, C1_DESPUES, C2_ANTES, ...);
---      b) toma el costo total del plan y la forma de acceso;
---      c) ejecuta la consulta "repeticiones" veces y cronometra;
---      d) guarda el resultado en E3_MEDICION.
--- ---------------------------------------------------------------------
+-- 2. Procedimiento que mide todas las consultas 
 CREATE OR REPLACE PROCEDURE pr_e3_medir (p_momento IN VARCHAR2) IS
     v_id      VARCHAR2(30);
     v_costo   NUMBER;
@@ -194,12 +153,6 @@ END pr_e3_medir;
 
 SHOW ERRORS PROCEDURE pr_e3_medir
 
--- ---------------------------------------------------------------------
--- 3. ANTES · estadísticas al día, medición y planes
---    Las estadísticas le dicen al optimizador cuántas filas tiene cada
---    tabla. Se actualizan antes y después para comparar en igualdad de
---    condiciones.
--- ---------------------------------------------------------------------
 BEGIN
     DBMS_STATS.GATHER_TABLE_STATS(USER, 'PAGO');
     DBMS_STATS.GATHER_TABLE_STATS(USER, 'CLIENTE');
@@ -225,23 +178,14 @@ SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', 'C4_ANTES', 'TYPICAL'));
 -- ---------------------------------------------------------------------
 
 -- C1 · COMPUESTO (3 columnas).
---      Orden de las columnas: primero las que se filtran con "=" y de
---      último la que se filtra por rango. Así Oracle baja directo al
---      grupo PSE + APROBADO y dentro de él las fechas ya están ordenadas.
 CREATE INDEX IX_PAGO_METODO_ESTADO_FECHA
     ON PAGO (metodo_pago, estado, fecha_pago);
 
 -- C2 · BASADO EN FUNCIÓN.
---      Un índice normal sobre apellidos NO sirve para esta consulta: el
---      WHERE compara UPPER(apellidos), no la columna tal cual. Este
---      índice guarda el resultado de UPPER(apellidos) ya calculado.
 CREATE INDEX IX_CLIENTE_APELLIDOS_UPPER
     ON CLIENTE (UPPER(apellidos));
 
 -- C3 · COMPUESTO que "cubre" la consulta.
---      Tiene la columna del filtro (id_servicio) y además las dos que la
---      consulta suma. Oracle responde solo con el índice y ni siquiera
---      visita la tabla.
 CREATE INDEX IX_RS_SERVICIO_VENTA
     ON RESERVA_SERVICIO (id_servicio, cantidad, precio_unitario);
 
@@ -298,9 +242,6 @@ SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', 'C3_DESPUES', 'TYPICAL'));
 SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', 'C4_DESPUES', 'TYPICAL'));
 SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', 'C5_DESPUES', 'TYPICAL'));
 
--- ---------------------------------------------------------------------
--- 6. Comparación ANTES vs DESPUÉS (la tabla para el PDF)
--- ---------------------------------------------------------------------
 SELECT c.codigo,
        c.descripcion,
        a.costo      AS costo_antes,
@@ -333,25 +274,7 @@ FROM RESERVA
 GROUP BY estado
 ORDER BY estado;
 
--- Explicación:
---   * Un índice sirve cuando la consulta trae POCAS filas de la tabla
---     (alta selectividad), como C1 o C2 que traen un puñado.
---   * C4 pide la cuarta parte de la tabla (unas 6.000 de 25.000 filas).
---     Con el índice Oracle tendría que leer el índice y, además, saltar a
---     la tabla fila por fila para traer las otras columnas. Esas filas
---     están repartidas por casi todos los bloques de la tabla, así que
---     terminaría leyéndola casi completa, pero de a un bloque y con el
---     trabajo extra del índice.
---   * Recorrer la tabla completa de una vez (TABLE ACCESS FULL) le sale
---     más barato, y por eso el optimizador IGNORA el índice: en la
---     comparación del punto 6, C4 tiene el mismo costo y el mismo acceso
---     antes y después.
---   * C5 lo confirma: es la misma consulta obligada a usar el índice con
---     un hint, y su costo DESPUÉS es mayor que el del recorrido completo.
---   * Además el índice no es gratis: ocupa espacio y cada INSERT o cambio
---     de estado de una reserva tendría que actualizarlo.
---
--- Conclusión: no se justifica, así que se elimina.
+
 DROP INDEX IX_RESERVA_ESTADO;
 
 -- Índices de la entrega 3 que SÍ quedan en el esquema (3 filas)

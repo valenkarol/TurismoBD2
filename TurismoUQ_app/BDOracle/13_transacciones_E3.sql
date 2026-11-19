@@ -1,34 +1,7 @@
--- =====================================================================
--- ENTREGA 3 · TRANSACCIONES
--- Ejecutar como: TURISMOUQ, después de los scripts 00 a 12.
---
--- Qué pide el enunciado:
---   "Procedimiento que registre reserva y pago de forma atómica, con
---    SAVEPOINT y demostración de un rollback parcial."
---
--- Qué contiene este script:
---   1. LOG_INTENTO_FALLIDO  -> bitácora de intentos que terminaron en error
---   2. PKG_TURISMOUQ_TX     -> paquete con:
---        pr_registrar_intento_fallido  (transacción AUTÓNOMA)
---        sp_reservar_con_pago          (reserva + pago, todo o nada)
---   3. Tres demostraciones:
---        CASO 1  todo sale bien            -> COMMIT
---        CASO 2  falla el servicio extra   -> ROLLBACK PARCIAL (SAVEPOINT)
---        CASO 3  falla el pago             -> ROLLBACK TOTAL
---   4. Limpieza de las reservas de prueba (para poder repetir el script).
---
--- Nota: si se ejecuta por segunda vez, el CREATE TABLE del punto 1 da
--- ORA-00955 (la tabla ya existe). Se puede ignorar: todo lo demás corre.
--- =====================================================================
 SET SERVEROUTPUT ON SIZE UNLIMITED
 SET DEFINE OFF
 
--- ---------------------------------------------------------------------
 -- 1. Bitácora de intentos fallidos
---    No tiene llaves foráneas a propósito: un intento puede fallar
---    justamente porque el cliente o la habitación no existen, y aun así
---    queremos dejarlo registrado.
--- ---------------------------------------------------------------------
 CREATE TABLE LOG_INTENTO_FALLIDO (
     id_intento      NUMBER GENERATED ALWAYS AS IDENTITY,
     fecha_intento   TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
@@ -48,12 +21,9 @@ CREATE TABLE LOG_INTENTO_FALLIDO (
 COMMENT ON TABLE LOG_INTENTO_FALLIDO IS
     'Intentos de reserva con pago que terminaron en ROLLBACK. Se llena con una transacción autónoma.';
 
--- ---------------------------------------------------------------------
 -- 2. Paquete de transacciones
--- ---------------------------------------------------------------------
 CREATE OR REPLACE PACKAGE PKG_TURISMOUQ_TX AS
 
-    -- Guarda el intento fallido en la bitácora con su PROPIO commit.
     PROCEDURE pr_registrar_intento_fallido (
         p_id_usuario_app IN NUMBER,
         p_id_cliente     IN NUMBER,
@@ -66,10 +36,7 @@ CREATE OR REPLACE PACKAGE PKG_TURISMOUQ_TX AS
         p_mensaje_error  IN VARCHAR2
     );
 
-    -- Reserva + (servicio opcional) + pago en UNA sola transacción.
-    --   * Si falla la reserva o el pago  -> no queda nada (rollback total).
-    --   * Si falla solo el servicio extra -> se deshace solo ese paso
-    --     (rollback parcial) y p_aviso explica qué pasó.
+-- Reserva + (servicio opcional) + pago en UNA sola transacción.
     PROCEDURE sp_reservar_con_pago (
         p_id_cliente    IN  CLIENTE.id_cliente%TYPE,
         p_id_habitacion IN  HABITACION.id_habitacion%TYPE,
@@ -92,16 +59,7 @@ END PKG_TURISMOUQ_TX;
 
 CREATE OR REPLACE PACKAGE BODY PKG_TURISMOUQ_TX AS
 
-    -- =================================================================
-    -- TRANSACCIÓN AUTÓNOMA
-    -- -----------------------------------------------------------------
-    -- Problema: cuando la reserva falla se hace ROLLBACK. Si el registro
-    -- del error se insertara en la misma transacción, el ROLLBACK también
-    -- lo borraría y no quedaría rastro del intento.
-    -- Solución: PRAGMA AUTONOMOUS_TRANSACTION. Este procedimiento abre
-    -- una transacción independiente, inserta y hace su propio COMMIT sin
-    -- tocar la transacción principal (la que llamó).
-    -- =================================================================
+-- TRANSACCIÓN AUTÓNOMA
     PROCEDURE pr_registrar_intento_fallido (
         p_id_usuario_app IN NUMBER,
         p_id_cliente     IN NUMBER,
@@ -126,28 +84,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_TURISMOUQ_TX AS
         COMMIT;   -- confirma SOLO la bitácora
     END pr_registrar_intento_fallido;
 
-    -- =================================================================
     -- sp_reservar_con_pago
     -- -----------------------------------------------------------------
     -- Línea de tiempo de la transacción:
-    --
-    --   SAVEPOINT sv_inicio
-    --      Paso 1: crear la reserva        (obligatorio)
-    --   SAVEPOINT sv_reserva_creada
-    --      Paso 2: agregar servicio extra  (opcional)
-    --      Paso 3: registrar el pago       (obligatorio)
-    --   COMMIT
-    --
-    --   Falla el paso 2 -> ROLLBACK TO sv_reserva_creada  (PARCIAL:
-    --                      se pierde el servicio, la reserva sigue viva
-    --                      y la transacción continúa con el pago).
-    --   Falla el paso 1 o el 3 -> ROLLBACK TO sv_inicio   (TOTAL:
-    --                      no queda ni reserva ni pago).
-    --
-    -- Los procedimientos de PKG_TURISMOUQ se llaman con p_commit => 'N'
-    -- para que NO confirmen por su cuenta: el único COMMIT es el del
-    -- final. Eso es lo que hace que reserva y pago sean atómicos.
-    -- =================================================================
     PROCEDURE sp_reservar_con_pago (
         p_id_cliente    IN  CLIENTE.id_cliente%TYPE,
         p_id_habitacion IN  HABITACION.id_habitacion%TYPE,
@@ -172,7 +111,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_TURISMOUQ_TX AS
         p_aviso := NULL;
 
         -- Paso 1: la reserva. Por dentro bloquea la habitación con
-        -- SELECT ... FOR UPDATE (ver script 07 y script 14).
         PKG_TURISMOUQ.sp_crear_reserva(
             p_id_cliente    => p_id_cliente,
             p_id_habitacion => p_id_habitacion,
@@ -203,8 +141,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_TURISMOUQ_TX AS
             END;
         END IF;
 
-        -- Paso 3: el pago. Si falla, la excepción salta al manejador de
-        -- abajo y se deshace TODO.
+        -- Paso 3: el pago. Si falla, la excepción salta 
         PKG_TURISMOUQ.sp_registrar_pago(
             p_id_reserva => p_id_reserva,
             p_valor      => p_valor_pago,
@@ -273,10 +210,8 @@ BEGIN
 END;
 /
 
--- ---------------------------------------------------------------------
+
 -- CASO 1 · Todo correcto: reserva + servicio + pago -> COMMIT
---          Se paga el valor completo del hospedaje.
--- ---------------------------------------------------------------------
 DECLARE
     v_cli     NUMBER;
     v_hab     NUMBER;
@@ -323,12 +258,7 @@ WHERE rh.id_habitacion = (SELECT MIN(id_habitacion) FROM HABITACION WHERE estado
   AND r.fecha_checkin = DATE '2027-02-10'
   AND r.estado <> 'CANCELADA';
 
--- ---------------------------------------------------------------------
 -- CASO 2 · ROLLBACK PARCIAL
---          El servicio 9999 no existe. Se deshace SOLO ese paso
---          (ROLLBACK TO sv_reserva_creada); la reserva y el pago quedan.
---          Se paga el 30 % (anticipo), así que queda CONFIRMADA.
--- ---------------------------------------------------------------------
 DECLARE
     v_cli     NUMBER;
     v_hab     NUMBER;
@@ -375,12 +305,7 @@ WHERE rh.id_habitacion = (SELECT MIN(id_habitacion) FROM HABITACION WHERE estado
   AND r.fecha_checkin = DATE '2027-03-10'
   AND r.estado <> 'CANCELADA';
 
--- ---------------------------------------------------------------------
 -- CASO 3 · ROLLBACK TOTAL
---          El método de pago 'BITCOIN' no es válido: el pago se rechaza
---          y la reserva que ya se había insertado se deshace también.
---          Lo único que queda es la fila de la bitácora (autónoma).
--- ---------------------------------------------------------------------
 DECLARE
     v_cli     NUMBER;
     v_hab     NUMBER;

@@ -1,39 +1,9 @@
--- =====================================================================
--- ENTREGA 3 · CONCURRENCIA  ·  SESIÓN A
--- Conectarse como: TURISMOUQ
---
--- Qué pide el enunciado:
---   "Experimento documentado con dos sesiones intentando reservar la
---    misma habitación al tiempo. Muestren el bloqueo, apliquen
---    SELECT ... FOR UPDATE y comparen el comportamiento antes y después."
---
--- CÓMO SE EJECUTA (importante)
---   * Este archivo NO se corre de una sola vez: se ejecuta PASO A PASO,
---     alternando con 14b_concurrencia_sesion_B.sql.
---   * Se necesitan DOS sesiones reales de TURISMOUQ. En SQL Developer:
---       - Sesión A: abrir este archivo con la conexión TURISMOUQ.
---       - Sesión B: con la conexión TURISMOUQ seleccionada, presionar
---         Ctrl + Shift + N (hoja de trabajo NO compartida) y abrir allí
---         el archivo 14b. Esa hoja tiene su propia sesión.
---   * Para ejecutar un paso: seleccionar el bloque completo (desde
---     DECLARE/BEGIN/SELECT hasta el "/" o el ";") y presionar F5.
---   * El orden está marcado en cada paso:  A1 -> B1 -> A2 -> B2 -> ...
---   * (Opcional) Una tercera hoja como SYSTEM con 14c para VER el bloqueo.
---
--- Datos del experimento
---   Habitación: la de menor id en estado DISPONIBLE (la misma en A y B).
---   Sesión A reserva para el cliente de menor id; B para el siguiente.
---   PARTE 1 (antes)   -> 10 al 13 de agosto de 2027
---   PARTE 2 (después) -> 10 al 13 de septiembre de 2027
--- =====================================================================
 SET SERVEROUTPUT ON SIZE UNLIMITED
 SET DEFINE OFF
 
 -- ---------------------------------------------------------------------
 -- A0. Preparación (una sola vez, solo en la sesión A)
---     Cancela reservas de un experimento anterior y verifica que la
---     habitación esté libre en las dos fechas. Debe mostrar S y S.
--- ---------------------------------------------------------------------
+
 BEGIN
     FOR x IN (SELECT r.id_reserva
               FROM RESERVA r
@@ -54,15 +24,10 @@ SELECT h.id_habitacion, h.numero,
 FROM HABITACION h
 WHERE h.id_habitacion = (SELECT MIN(id_habitacion) FROM HABITACION WHERE estado = 'DISPONIBLE');
 
-
--- =====================================================================
--- PARTE 1 · ANTES: sin SELECT ... FOR UPDATE   (p_bloquear => 'N')
--- =====================================================================
-
 -- ---------------------------------------------------------------------
 -- A1. La sesión A reserva la habitación y NO confirma todavía.
 --     Resultado: "Sesión A: reserva ... creada".
--- ---------------------------------------------------------------------
+
 DECLARE
     v_cli     NUMBER;
     v_hab     NUMBER;
@@ -98,16 +63,7 @@ COMMIT;
 --  >>> Ir a la SESIÓN B y ejecutar B2 (COMMIT).
 
 -- ---------------------------------------------------------------------
--- A3. Resultado del "antes": la MISMA habitación quedó vendida DOS veces
---     para las mismas noches (deben salir 2 filas).
---
---     ¿Por qué pasó? Oracle trabaja en READ COMMITTED: cada sesión solo
---     ve datos confirmados. Cuando B revisó la disponibilidad, la reserva
---     de A todavía no tenía COMMIT, así que para B la habitación estaba
---     libre. Ni el procedimiento ni el disparador de solapes (script 08)
---     podían ver la fila de la otra sesión. Es el problema de
---     concurrencia "dos clientes reservando el último cupo".
--- ---------------------------------------------------------------------
+-- A3. 
 SELECT r.id_reserva, r.id_cliente, rh.id_habitacion,
        r.fecha_checkin, r.fecha_checkout, r.estado
 FROM RESERVA r
@@ -117,18 +73,9 @@ WHERE rh.id_habitacion = (SELECT MIN(id_habitacion) FROM HABITACION WHERE estado
   AND r.estado <> 'CANCELADA';
 
 
--- =====================================================================
--- PARTE 2 · DESPUÉS: con SELECT ... FOR UPDATE   (p_bloquear => 'S')
---   sp_crear_reserva ejecuta primero (script 07, bloquear_habitacion):
---       SELECT id_habitacion FROM HABITACION
---       WHERE id_habitacion = :hab FOR UPDATE WAIT 20;
---   y solo después revisa la disponibilidad.
--- =====================================================================
-
 -- ---------------------------------------------------------------------
 -- A4. La sesión A reserva (ahora con bloqueo) y NO confirma todavía.
---     La fila de la habitación queda bloqueada por la sesión A.
--- ---------------------------------------------------------------------
+
 DECLARE
     v_cli     NUMBER;
     v_hab     NUMBER;
@@ -153,16 +100,9 @@ BEGIN
 END;
 /
 
---  >>> Ir a la SESIÓN B y ejecutar B3.
---      B se queda "pensando": está esperando el bloqueo de A.
---      (Opcional: en la hoja de SYSTEM ejecutar 14c para ver el bloqueo
---       y tomar el pantallazo.)
---      Hay 20 segundos para volver aquí y ejecutar A5.
 
 -- ---------------------------------------------------------------------
--- A5. La sesión A confirma. En ese instante B se desbloquea, revisa la
---     disponibilidad, YA ve la reserva de A y es rechazada (ORA-20002).
--- ---------------------------------------------------------------------
+-- A5. La sesión A confirma. En ese instante B se desbloquea
 COMMIT;
 
 -- ---------------------------------------------------------------------
@@ -198,10 +138,7 @@ ROLLBACK;
 
 
 -- =====================================================================
--- A9. Limpieza final (después de tomar los pantallazos)
---     Cancela las reservas del experimento, incluida la doble venta de
---     la PARTE 1, para que la base quede consistente.
--- =====================================================================
+-- A9. Limpieza final
 BEGIN
     FOR x IN (SELECT r.id_reserva
               FROM RESERVA r

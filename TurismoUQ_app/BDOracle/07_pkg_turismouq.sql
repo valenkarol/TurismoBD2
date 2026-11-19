@@ -227,18 +227,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_TURISMOUQ AS
         END IF;
     END validar_rango;
 
-    -- =================================================================
     -- E3 · CONCURRENCIA  ·  bloqueo pesimista de la habitación
-    -- -----------------------------------------------------------------
-    -- SELECT ... FOR UPDATE bloquea SOLO la fila de esa habitación hasta
-    -- que la transacción termine (COMMIT o ROLLBACK).
-    -- Si otra sesión ya la tiene bloqueada, esta sesión espera máximo 20
-    -- segundos (WAIT 20). Si en ese tiempo no la liberan, Oracle lanza
-    -- ORA-30006 y aquí se cambia por un mensaje propio (-20014).
-    -- Así dos sesiones nunca revisan la disponibilidad de la misma
-    -- habitación al mismo tiempo: la segunda entra cuando la primera ya
-    -- confirmó, y entonces SÍ ve la reserva de la primera.
-    -- =================================================================
     PROCEDURE bloquear_habitacion (
         p_id_habitacion IN HABITACION.id_habitacion%TYPE
     ) IS
@@ -260,12 +249,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_TURISMOUQ AS
                 ' en este momento. Intente de nuevo en unos segundos.');
     END bloquear_habitacion;
 
-    -- =================================================================
+
     -- fn_valor_estadia
-    -- -----------------------------------------------------------------
-    --   BAJA 2027  [03-29, 04-01) = 3 noches x tarifa BAJA
-    --   MEDIA 2027 [04-01, 04-03) = 2 noches x tarifa MEDIA
-    -- =================================================================
+
     FUNCTION fn_valor_estadia (
         p_id_habitacion IN HABITACION.id_habitacion%TYPE,
         p_fecha_in      IN DATE,
@@ -512,7 +498,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_TURISMOUQ AS
             RAISE;
     END sp_registrar_cliente;
 
-    -- =================================================================
     -- sp_crear_reserva
     -- =================================================================
     PROCEDURE sp_crear_reserva (
